@@ -101,7 +101,7 @@ inline long rand_range_re(unsigned int *seed, long r) {
 long rand_range_re(unsigned int *seed, long r);
 
 typedef struct thread_data {
-  val_t first;
+  key_type first;
 	long range;
 	int update;
 	int move;
@@ -140,7 +140,7 @@ typedef struct thread_data {
 
 void *test(void *data) {
 	int val2, numtx, r, last = -1;
-	val_t val = 0;
+	key_type val = 0;
 	int unext, mnext, cnext;
 	
 	thread_data_t *d = (thread_data_t *)data;
@@ -178,7 +178,7 @@ void *test(void *data) {
 	    } else if (last < 0) { // add
 	      
 	      val = rand_range_re(&d->seed, d->range);
-	      if (ht_add(d->set, val, TRANSACTIONAL)) {
+	      if (ht_add(d->set, val, val, TRANSACTIONAL)) {
 					d->nb_added++;
 					last = val;
 	      } 				
@@ -286,7 +286,7 @@ void *test2(void *data)
 	      if (flag) {
 					/* Add random value */
 					val = (rand_r(&d->seed) % d->range) + 1;
-					if (ht_add(d->set, val, TRANSACTIONAL)) {
+					if (ht_add(d->set, val, val, TRANSACTIONAL)) {
 						d->nb_added++;
 						last = val;
 						flag = 0;
@@ -344,11 +344,11 @@ void print_set(intset_t *set) {
 	curr = set->head;
 	tmp = curr;
 	do {
-		printf(" - v%d", (int) curr->val);
+		printf(" - v%d", (int) curr->key);
 		tmp = curr;
 		curr = tmp->next;
-	} while (curr->val != VAL_MAX);
-	printf(" - v%d", (int) curr->val);
+	} while (curr->key != VAL_MAX);
+	printf(" - v%d", (int) curr->key);
 	printf("\n");
 }
 
@@ -378,8 +378,8 @@ int main(int argc, char **argv)
 	
 	ht_intset_t *set;
 	int i, c, size;
-	val_t last = 0; 
-	val_t val = 0;
+	key_type last = 0; 
+	key_type val = 0;
 	unsigned long reads, effreads, updates, effupds, moves, moved, snapshots, 
 	snapshoted, aborts, aborts_locked_read, aborts_locked_write, 
 	aborts_validate_read, aborts_validate_write, aborts_validate_commit, 
@@ -567,7 +567,7 @@ int main(int argc, char **argv)
 	maxhtlength = (int) (initial / load_factor);
 	while (i < initial) {
 		val = rand_range(range);
-		if (ht_add(set, val, 0)) {
+		if (ht_add(set, val, val, 0)) {
 		  last = val;
 		  i++;			
 		}

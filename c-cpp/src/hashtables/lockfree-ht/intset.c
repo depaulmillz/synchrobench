@@ -23,7 +23,7 @@
 
 #include "intset.h"
 
-int ht_contains(ht_intset_t *set, int val, int transactional) {
+int ht_contains(ht_intset_t *set, key_type val, int transactional) {
 	int addr;
 	
 	addr = val % maxhtlength;
@@ -33,17 +33,17 @@ int ht_contains(ht_intset_t *set, int val, int transactional) {
 	  return set_contains(set->buckets[addr], val, transactional);
 }
 
-int ht_add(ht_intset_t *set, int val, int transactional) {
+int ht_add(ht_intset_t *set, key_type key, val_type val, int transactional) {
 	int addr;
 	
 	addr = val % maxhtlength;
 	if (transactional == 5)
-		return set_add(set->buckets[addr], val, 4);
+		return set_add(set->buckets[addr], key, val, 4);
 	else 
-		return set_add(set->buckets[addr], val, transactional);
+		return set_add(set->buckets[addr], key, val, transactional);
 }
 
-int ht_remove(ht_intset_t *set, int val, int transactional) {
+int ht_remove(ht_intset_t *set, key_type val, int transactional) {
 	int addr;
     
 	addr = val % maxhtlength;
