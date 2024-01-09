@@ -10,7 +10,7 @@ else
   BINS = $(BINDIR)/$(STM)-hashtable
 endif
 
-CFLAGS += -std=gnu89
+CFLAGS += -std=c99
 
 .PHONY:	all clean
 
@@ -35,7 +35,7 @@ test.o: linkedlist.o harris.o intset.o hashtable.o intset.o
 	$(CC) $(CFLAGS) -c -o $(BUILDIR)/test.o test.c
 
 main: linkedlist.o harris.o intset.o hashtable.o intset.o test.o 
-	$(CC) $(CFLAGS) $(BUILDIR)/linkedlist.o $(BUILDIR)/harris.o $(BUILDIR)/ll-intset.o $(BUILDIR)/hashtable.o $(BUILDIR)/intset.o $(BUILDIR)/test.o -o $(BINS) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(BUILDIR)/linkedlist.o $(BUILDIR)/harris.o $(BUILDIR)/ll-intset.o $(BUILDIR)/hashtable.o $(BUILDIR)/intset.o $(BUILDIR)/test.o -o $(BINS) $(LDFLAGS) -lm
 
 clean:
 	-rm -f $(BINS)

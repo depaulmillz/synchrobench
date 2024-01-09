@@ -22,9 +22,16 @@
  */
 
 #include "intset.h"
+#include <math.h>
+#include <float.h>
 
 /* Hashtable length (# of buckets) */
 unsigned int maxhtlength;
+
+int inited = 0;
+float zetaN; 
+float alpha; 
+float eta;
 
 /* Hashtable seed */
 #ifdef TLS
@@ -84,6 +91,7 @@ inline long rand_range(long r) {
 	} while (r > 0);
 	return v;
 }
+
 long rand_range(long r);
 
 /* Thread-safe, re-entrant version of rand_range(r) */
@@ -100,9 +108,41 @@ inline long rand_range_re(unsigned int *seed, long r) {
 }
 long rand_range_re(unsigned int *seed, long r);
 
+inline float zeta(float theta, int n) {
+  float sum = 0;
+  for (int i = 1; i <= n; i++) {
+      sum += 1 / (powf(i, theta));
+  }
+  return sum;
+}
+
+static inline long get_zipf_re(unsigned int *seed, long r, float theta) {
+
+  assert(inited);
+
+  float u = rand_range_re(seed, RAND_MAX) / (float)RAND_MAX;
+ 
+  float uz = u * zetaN;
+
+  if(uz < 1) return 1;
+  if(uz < 1 + powf(0.5, theta)) return 2;
+  return (long)(1 + r * powf(eta * u - eta + 1.0f, alpha));
+}
+
+/* Thread-safe, re-entrant version of rand_range(r) */
+inline long get_key(unsigned int *seed, long r, int zipf, float theta) {
+  if(zipf) {
+    return get_zipf_re(seed, r, theta);
+  }
+  return rand_range_re(seed, r);
+}
+long get_key(unsigned int *seed, long r, int zipf, float theta);
+
 typedef struct thread_data {
   key_type first;
 	long range;
+  int zipf;
+  float theta;
 	int update;
 	int move;
 	int snapshot;
@@ -166,9 +206,9 @@ void *test(void *data) {
 	    
 	    if (mnext) { // move
 	      
-	      if (last == -1) val = rand_range_re(&d->seed, d->range);
+	      if (last == -1) val = get_key(&d->seed, d->range, d->zipf, d->theta);
 	      else val = last;
-	      val2 = rand_range_re(&d->seed, d->range);
+	      val2 = get_key(&d->seed, d->range, d->zipf, d->theta);
 	      if (ht_move(d->set, val, val2, TRANSACTIONAL)) {
 					d->nb_moved++;
 					last = -1;
@@ -177,7 +217,7 @@ void *test(void *data) {
 	      
 	    } else if (last < 0) { // add
 	      
-	      val = rand_range_re(&d->seed, d->range);
+	      val = get_key(&d->seed, d->range, d->zipf, d->theta);
 	      if (ht_add(d->set, val, val, TRANSACTIONAL)) {
 					d->nb_added++;
 					last = val;
@@ -193,7 +233,7 @@ void *test(void *data) {
 					}
 	      } else {
 					/* Random computation only in non-alternated cases */
-					val = rand_range_re(&d->seed, d->range);
+					val = get_key(&d->seed, d->range, d->zipf, d->theta);
 					/* Remove one random value */
 					if (ht_remove(d->set, val, TRANSACTIONAL)) {
 						d->nb_removed++;
@@ -214,18 +254,18 @@ void *test(void *data) {
 							val = d->first;
 							last = val;
 						} else { // last >= 0
-							val = rand_range_re(&d->seed, d->range);
+							val = get_key(&d->seed, d->range, d->zipf, d->theta);
 							last = -1;
 						}
 					} else { // update != 0
 						if (last < 0) {
-							val = rand_range_re(&d->seed, d->range);
+							val = get_key(&d->seed, d->range, d->zipf, d->theta);
 							//last = val;
 						} else {
 							val = last;
 						}
 					}
-	      }	else val = rand_range_re(&d->seed, d->range);
+	      }	else val = get_key(&d->seed, d->range, d->zipf, d->theta);
 				
 	      if (ht_contains(d->set, val, TRANSACTIONAL)) 
 					d->nb_found++;
@@ -268,6 +308,8 @@ void *test(void *data) {
 
 void *test2(void *data)
 {
+  printf("This should not execute\n");
+  exit(1);
 	int val, newval, last, flag = 1;
 	thread_data_t *d = (thread_data_t *)data;
 	
@@ -365,6 +407,7 @@ int main(int argc, char **argv)
 		// These options don't set a flag
 		{"help",                      no_argument,       NULL, 'h'},
 		{"duration",                  required_argument, NULL, 'd'},
+		{"zipf",                      required_argument, NULL, 'z'},
 		{"initial-size",              required_argument, NULL, 'i'},
 		{"thread-num",                required_argument, NULL, 't'},
 		{"range",                     required_argument, NULL, 'r'},
@@ -404,10 +447,11 @@ int main(int argc, char **argv)
 	int alternate = DEFAULT_ALTERNATE;
 	int effective = DEFAULT_EFFECTIVE;
 	sigset_t block_set;
+  float theta = NAN;
 	
 	while(1) {
 		i = 0;
-		c = getopt_long(argc, argv, "hAf:d:i:t:r:S:u:a:s:l:x:", long_options, &i);
+		c = getopt_long(argc, argv, "hAf:d:i:t:r:S:u:a:s:l:x:z:", long_options, &i);
 		
 		if(c == -1)
 			break;
@@ -459,6 +503,7 @@ int main(int argc, char **argv)
 								 "        3 = read/add elastic-tx,\n"
 								 "        4 = read/add/rem elastic-tx,\n"
 								 "        5 = elastic-tx w/ optimized move.\n"
+								 "  -z, --zipf <theta>\n"
 								 );
 					exit(0);
 				case 'A':
@@ -497,6 +542,9 @@ int main(int argc, char **argv)
 				case 'x':
 					unit_tx = atoi(optarg);
 					break;
+        case 'z':
+          theta = atof(optarg);
+          break;
 				case '?':
 					printf("Use -h or --help for help\n");
 					exit(0);
@@ -515,6 +563,14 @@ int main(int argc, char **argv)
 	assert(initial < MAXHTLENGTH);
 	assert(initial >= load_factor);
 	
+  if(!isnan(theta)) {
+    zetaN = zeta(theta, range);
+    alpha = 1.0f / (1.0f - theta);
+    eta = (1.0f - powf(2.0f / range, 1.0f - theta)) 
+          / (1.0f - zeta(theta, 2) / zetaN);
+    inited = 1;
+  }
+
 	printf("Set type     : lock-free hash table\n");
 	printf("Duration     : %d\n", duration);
 	printf("Initial size : %d\n", initial);
@@ -528,6 +584,7 @@ int main(int argc, char **argv)
 	printf("Elasticity   : %d\n", unit_tx);
 	printf("Alternate    : %d\n", alternate);	
 	printf("Effective    : %d\n", effective);
+	printf("Zipf         : %f\n", theta);
 	printf("Type sizes   : int=%d/long=%d/ptr=%d/word=%d\n",
 				 (int)sizeof(int),
 				 (int)sizeof(long),
@@ -585,6 +642,8 @@ int main(int argc, char **argv)
 		printf("Creating thread %d\n", i);
 		data[i].first = last;
 		data[i].range = range;
+    data[i].zipf = !isnan(theta);
+    data[i].theta = theta;
 		data[i].update = update;
 		data[i].load_factor = load_factor;
 		data[i].move = move;
