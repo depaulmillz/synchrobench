@@ -34,7 +34,7 @@ int set_contains(intset_t *set, key_type key, int transactional)
 #elif defined STM			
 
 	node_t *prev, *next;
-	key_t v = 0;
+	key_type v = 0;
 
 	if (transactional > 1) {
 
@@ -117,7 +117,7 @@ int set_add(intset_t *set, key_type key, val_type val, int transactional)
 #elif defined STM
 	
 		node_t *prev, *next;
-		val_t v;	
+		val_type v;	
 	
 		if (transactional > 2) {
 
@@ -151,7 +151,7 @@ int set_add(intset_t *set, key_type key, val_type val, int transactional)
 		  }
 		  result = (v != key);
 		  if (result) {
-		    TX_STORE(&prev->next, new_node(key, next, transactional));
+		    TX_STORE(&prev->next, new_node(key, key, next, transactional));
 		  }
 		  TX_END;
 
@@ -181,11 +181,11 @@ int set_remove(intset_t *set, key_type key, int transactional)
 
 	prev = set->head;
 	next = prev->next;
-	while (next->val < val) {
+	while (next->key < key) {
 		prev = next;
 		next = prev->next;
 	}
-	result = (next->val == val);
+	result = (next->key == key);
 	if (result) {
 		prev->next = next->next;
 		free(next);
@@ -194,7 +194,7 @@ int set_remove(intset_t *set, key_type key, int transactional)
 #elif defined STM
 	
 	node_t *prev, *next;
-	val_t v;
+	val_type v;
 	node_t *n;
 
 	if (transactional > 3) {
@@ -203,13 +203,13 @@ int set_remove(intset_t *set, key_type key, int transactional)
 	  prev = set->head;
 	  next = (node_t *)TX_LOAD(&prev->next);
 	  while (1) {
-	    v = TX_LOAD((uintptr_t *) &next->val);
-	    if (v >= val)
+	    v = TX_LOAD((uintptr_t *) &next->key);
+	    if (v >= key)
 	      break;
 	    prev = next;
 	    next = (node_t *)TX_LOAD(&prev->next);
 	  }
-	  result = (v == val);
+	  result = (v == key);
 	  if (result) {
 	    n = (node_t *)TX_LOAD(&next->next);
 	    TX_STORE(&prev->next, n);
@@ -223,13 +223,13 @@ int set_remove(intset_t *set, key_type key, int transactional)
 	  prev = set->head;
 	  next = (node_t *)TX_LOAD(&prev->next);
 	  while (1) {
-	    v = TX_LOAD((uintptr_t *) &next->val);
-	    if (v >= val)
+	    v = TX_LOAD((uintptr_t *) &next->key);
+	    if (v >= key)
 	      break;
 	    prev = next;
 	    next = (node_t *)TX_LOAD(&prev->next);
 	  }
-	  result = (v == val);
+	  result = (v == key);
 	  if (result) {
 	    n = (node_t *)TX_LOAD(&next->next);
 	    TX_STORE(&prev->next, n);
